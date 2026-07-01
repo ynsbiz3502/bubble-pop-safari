@@ -611,15 +611,6 @@
   makeClouds();
   renderStickerbook();
   updateHUD();
-
-  // Test hook (harmless): lets automated/hidden tabs verify mechanics without rAF.
-  window.__bps = {
-    spawnBubble, popBubble, stepBubbles,
-    state:()=>({stars,level,popsThisPrize,bubbles:bubbles.size,muted,running}),
-    firstBubble:()=>[...bubbles][0]||null,
-    bubblesArr:()=>[...bubbles],
-    setMute:(m)=>{muted=m;}
-  };
 })();
 </script>
 </body>
