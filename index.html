@@ -90,6 +90,7 @@
   }
   .bubble .emoji{ font-size:52px; filter:drop-shadow(0 3px 2px rgba(0,0,0,.18)); pointer-events:none; }
   .bubble.gold{ box-shadow: inset 0 0 26px rgba(255,225,120,.9), 0 0 26px rgba(255,205,80,.9); border-color:#ffe08a; }
+  .bubble.plain{ opacity:.9; }
   .bubble.rainbow{ animation:rbw 2s linear infinite; }
   @keyframes rbw{ 0%{filter:hue-rotate(0)} 100%{filter:hue-rotate(360deg)} }
   .wobble{ animation:wob 3s ease-in-out infinite; }
@@ -246,6 +247,7 @@
   // ---------- State ----------
   let stars = 0, level = 1, popsThisPrize = 0;
   const POPS_PER_PRIZE = 10;
+  const ITEM_CHANCE = 0.4; // only ~40% of bubbles contain an animal/object; the rest are plain bubbles
   let earnedStickers = [];
   let running = false, muted = false;
   const bubbles = new Set();
@@ -339,14 +341,16 @@
 
   // ---------- Bubbles ----------
   function spawnBubble(){
-    const size = rand(84, 128) * (W()<520?0.9:1);
-    const item = pick(ITEMS);
+    const hasItem = Math.random() < ITEM_CHANCE;
+    // plain bubbles run a little smaller so lots of them can share the screen
+    const size = (hasItem ? rand(78, 118) : rand(56, 96)) * (W()<520?0.86:1);
+    const item = hasItem ? pick(ITEMS) : null;
     const special = Math.random();
-    const isGold = special > 0.92;
-    const isRainbow = !isGold && special > 0.85;
+    const isGold = hasItem && special > 0.92;
+    const isRainbow = hasItem && !isGold && special > 0.85;
 
     const b = document.createElement('div');
-    b.className = 'bubble wobble' + (isGold?' gold':'') + (isRainbow?' rainbow':'');
+    b.className = 'bubble wobble' + (isGold?' gold':'') + (isRainbow?' rainbow':'') + (hasItem?'':' plain');
     b.style.width = b.style.height = size+'px';
     const color = isGold ? '#ffe08a' : pick(BUBBLE_COLORS);
     b.style.background += `, radial-gradient(circle at 50% 55%, ${color}cc, ${color}55 70%, ${color}22 100%)`;
@@ -354,10 +358,12 @@
     b.style.top = (H()+size) + 'px';
     b.style.animationDelay = rand(0,3)+'s';
 
-    const em = document.createElement('div');
-    em.className='emoji'; em.textContent = item.e;
-    em.style.fontSize = (size*0.42)+'px';
-    b.appendChild(em);
+    if(item){
+      const em = document.createElement('div');
+      em.className='emoji'; em.textContent = item.e;
+      em.style.fontSize = (size*0.42)+'px';
+      b.appendChild(em);
+    }
 
     const speed = rand(38, 72) * (1 + (level-1)*0.06);   // px/sec, rises slowly with level
     const sway = rand(-1,1);
@@ -382,20 +388,25 @@
     const color = getComputedStyle(d.el).borderColor || '#fff';
     burst(cx, cy, d.gold ? '#ffcf33' : color, d.gold?22:14);
     ripple(cx, cy, d.size);
-    flyEmoji(cx, cy, d.item.e);
-    showWord(cx, cy, d.item.n);
 
     let gain = 1;
-    if(d.gold){ gain = 5; goldSound(); confettiBurst(cx,cy,26); }
-    else if(d.rainbow){ gain = 3; goldSound(); }
-    else { popSound(); }
-    say(d.item.n);
+    if(d.item){
+      flyEmoji(cx, cy, d.item.e);
+      showWord(cx, cy, d.item.n);
+      if(d.gold){ gain = 5; goldSound(); confettiBurst(cx,cy,26); }
+      else if(d.rainbow){ gain = 3; goldSound(); }
+      else { popSound(); }
+      say(d.item.n);
+    } else {
+      // plain bubble — just a satisfying pop
+      popSound();
+    }
 
     stars += gain;
     popsThisPrize += gain;
 
-    // occasional spoken praise
-    if(Math.random() < 0.22) setTimeout(()=>{ showPraise(pick(PRAISE)); }, 260);
+    // occasional spoken praise (a bit more often when it's an animal/object)
+    if(Math.random() < (d.item ? 0.28 : 0.08)) setTimeout(()=>{ showPraise(pick(PRAISE)); }, 260);
 
     updateHUD();
 
@@ -522,9 +533,15 @@
 
     // spawn
     spawnTimer -= dt;
-    const target = 4 + Math.min(4, Math.floor(level/2)); // how many on screen
-    const spawnGap = Math.max(0.5, 1.4 - level*0.05);
-    if(spawnTimer<=0 && bubbles.size < target){ spawnBubble(); spawnTimer = spawnGap; }
+    const target = 12 + Math.min(10, level*2); // lots of bubbles on screen at once (12 → 22)
+    const spawnGap = Math.max(0.12, 0.45 - level*0.03);
+    if(spawnTimer<=0 && bubbles.size < target){
+      spawnBubble();
+      // spawn a few at a time so the screen fills up quickly and stays busy
+      if(bubbles.size < target) spawnBubble();
+      if(bubbles.size < target && Math.random()<0.6) spawnBubble();
+      spawnTimer = spawnGap;
+    }
 
     // move
     bubbles.forEach(d=>{
@@ -585,6 +602,15 @@
   makeClouds();
   renderStickerbook();
   updateHUD();
+
+  // Test hook (harmless): lets automated/hidden tabs verify mechanics without rAF.
+  window.__bps = {
+    spawnBubble, popBubble,
+    state:()=>({stars,level,popsThisPrize,bubbles:bubbles.size,muted,running}),
+    firstBubble:()=>[...bubbles][0]||null,
+    bubblesArr:()=>[...bubbles],
+    setMute:(m)=>{muted=m;}
+  };
 })();
 </script>
 </body>
